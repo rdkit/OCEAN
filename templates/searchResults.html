@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block head %}
+
+<title>Search for Neighbourhood by Compounds</title>
+
+<link href="/media/css/result.css" media="screen" rel="stylesheet" type="text/css" />
+
+<script type = "text/javascript" src="/media/scripts/sorttable.js"> </script>
+<script type = "text/javascript" src="/media/marvin/marvin.js"></script>
+
+
+<!--[if lte IE 8]>
+    <script language="javascript" type = "text/javascript" src="/media/scripts/excanvas.min.js"> </script>
+<![endif]-->
+<script type = "text/javascript" src="/media/scripts/jquery.js"> </script>
+<script type = "text/javascript" src="/media/scripts/jquery.flot.js"> </script>
+<script type = "text/javascript" src="/media/scripts/jquery.flot.pie.js"> </script>
+<script type = "text/javascript" src="/media/scripts/jquery.appear.js"> </script>
+
+
+<script type="text/javascript">
+function show_hide(element){
+    line = document.getElementById(element);
+    if (line.style.display=='none'){
+        line.style.display = 'table-row';
+    }
+    else {
+        line.style.display='none';
+    }
+}
+</script>
+<script>
+function ajax_hit_profile(b64smiles){
+    var xml_http;
+    if (window.XMLHttpRequest){ // IE7+, Firefox, Chrome, Opera, Safari
+        xml_http = new XMLHttpRequest();
+    }
+    else{
+        xml_http = new ActiveXObject("Microsoft.XMLHTTP");
+    }
+
+    var element = document.getElementById('hit_profile_' + b64smiles);
+    element.innerHTML = '<img src="/media/img/wait.gif">';
+
+    var result;
+    xml_http.onreadystatechange=function(){
+        if (xml_http.readyState==4 && xml_http.status==200){
+            result = xml_http.responseXML.getElementsByTagName("*");
+            var element = document.getElementById('hit_profile_' + b64smiles);
+            element.innerHTML = result[1].firstChild.nodeValue + "<br>";
+            element.innerHTML += result[2].firstChild.nodeValue + "<br>";
+            element.innerHTML += result[3].firstChild.nodeValue + "<br>";
+            element.innerHTML += result[4].firstChild.nodeValue + "<br>";
+        }
+    }
+
+    xml_http.open("POST",'/findNeighbourhoodForCompounds/',true);
+    xml_http.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+    xml_http.send('hit_profile=True&datasource={{ datasource }}&smiles='+b64smiles);
+}
+
+
+function ajax_get_cmpd_data(target,smiles) {
+    var xml_http;
+    b64querysmiles = smiles;
+    if (window.XMLHttpRequest){ // IE7+, Firefox, Chrome, Opera, Safari
+        xml_http = new XMLHttpRequest();
+    }
+    else{
+        xml_http = new ActiveXObject("Microsoft.XMLHTTP");
+    }
+    var result;
+    line = document.getElementById('tr_'+target);
+    table = document.getElementById('table_'+target);
+    buttn = document.getElementById(target+'_button');
+
+    if (line.style.display=='none'){
+        line.style.display = 'table-row';
+        buttn.innerHTML = '-';
+    }
+    else {
+        line.style.display='none';
+        buttn.innerHTML = '+';
+        table.innerHTML='<tr><th>#</th><th>Molecule ID</th><th>Smiles</th><th>Molecule</th><th>Standard Value</th><th class="sorttable_numeric">Tanimoto Distance to Query</th></tr>';
+        return;
+    }
+    xml_http.onreadystatechange=function(){
+
+        if (xml_http.readyState==4 && xml_http.status==200){
+            result = xml_http.responseXML.getElementsByTagName("entry");
+            table = document.getElementById('table_' + target);
+            for (i=0;i<result.length;i++){
+                row = table.insertRow(-1);
+                cell0 = row.insertCell(0);
+                cell1 = row.insertCell(1);
+                cell2 = row.insertCell(2);
+                cell3 = row.insertCell(3);
+                cell4 = row.insertCell(4);
+                cell5 = row.insertCell(5);
+                cell0.innerHTML = i;
+
+                data = result[i].getElementsByTagName('molecule_chembl_id');
+                cell1.innerHTML = data[0].firstChild.nodeValue;
+
+                data = result[i].getElementsByTagName('canonical_smiles');
+                smiles = data[0].firstChild.nodeValue;
+
+                data = result[i].getElementsByTagName('b64smiles');
+                b64smiles = data[0].firstChild.nodeValue;
+                cell2.innerHTML = smiles + ' <a href="/findNeighbourhoodForCompounds/?smiles=' + b64smiles + '&datasource={{ datasource }}" target="_blank" style="font-size: large;">↻</a> <div id="hit_profile_' + b64smiles + '"><a href="javascript:void(0)" onclick="ajax_hit_profile(\'' + b64smiles + '\');">Get Hit Profile</a></div>';
+	            $(cell2).css("word-break","break-all");
+
+	            cell3.innerHTML = '<img src="/png_for_smiles/?smiles=' + b64smiles  + '&width=130&height=130">';
+
+                data = result[i].getElementsByTagName('standard_value');
+	            cell4.innerHTML = data[0].firstChild.nodeValue;
+
+                data = result[i].getElementsByTagName('tc');
+                cell5.innerHTML = data[0].firstChild.nodeValue;
+            }
+            sorttable.makeSortable(table);
+	        sorttable.innerSortFunction.apply(table.rows[0].cells[5], []);
+            sorttable.innerSortFunction.apply(table.rows[0].cells[5], []);
+        }
+    }
+    xml_http.open("POST",'/ajax_get_cmpd_data/',true);
+    xml_http.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+    xml_http.send('target='+target+'&smiles='+b64querysmiles+'&datasource={{ datasource }}');
+}
+
+function getURL(smiles){
+    return '<img src="/png_for_smiles/?smiles=' + escape(smiles).replace(/\+/g,"%2B").replace(/\-/,"%2D") + '&width=130&height=130">';
+}
+
+function getMarvinViewHTML(smiles){
+    var width=200;
+    var height=200;
+    mview_name = "marvin_cmpd";
+    mview_begin("/media/marvin", width, height);
+    mview_param("mol",smiles);
+    mview_param("molbg","#FFFFFF");
+    return get_embed_string();
+}
+
+function labelFormatter(label, series) {
+            return "<div style='font-size:12px;'>" + label + "<br/>" + Math.round(series.percent) + "%</div>";
+}
+
+function plot_pie(width,height){
+        $("#placeholder").width(width+"px");
+        $("#placeholder").height(height+"px");
+        var data = [];
+
+        {% for entry in class_counter_sorted %}
+            data[{{forloop.counter0}}] = {label: "{{entry.0}}", data: {{entry.1}}};
+        {% endfor %}
+        $.plot($("#placeholder"),data,{
+            series:{
+                pie:{
+                    show:true,
+                    label: {
+                        show:true,
+                        formatter:labelFormatter
+                    }
+                    }
+                },
+                legend:{
+                    show:false
+                    }
+                }
+        );
+}
+
+function flip(element){
+    info_element = document.getElementById("DB_Info");
+
+    minW = window.innerWidth - 36 || document.documentElement.clientWidth - 21 || document.body.clientWidth - 21 ;
+    maxW = window.innerWidth - 390 || document.documentElement.clientWidth - 375 || document.body.clientWidth - 375;
+    if(element.innerHTML.charCodeAt(0) == 8649){
+        element.innerHTML = "⇇";
+
+        $(info_element).css("left",minW);
+    } else {
+        element.innerHTML = "⇉";
+        $(info_element).css("left",maxW);
+    }
+}
+
+maxW = window.innerWidth - 350 || document.documentElement.clientWidth - 300 || document.body.clientWidth - 300;
+info_element = document.getElementById("DB_Info");
+$(info_element).css("left",maxW);
+
+</script>
+
+{% endblock %}
+
+{% block body_modifications %}onload="//draginit();"{% endblock %}
+
+{% block body %}
+<div ID="DB_Info" style="position:fixed;top:0px;right:0px;height:100%;overflow:auto;border:2px solid #F00;background-color:#FFC;padding:3px 18px;word-wrap: break-word;">
+    <div id="flip" style="font-size:20px; position: absolute; left: 0px; top: 0px; border-style: solid ;border-color: #000; border-width: 0px 1px 1px 0px; display: inline; cursor:hand; cursor:pointer" onclick="flip(this)">⇉</div>
+    <center><H2>Query:</H2></center><br>
+    <span style="word-break:break-all;">Smiles: <b>{{smiles}}</b></span><br>
+    <center><img src="/png_for_smiles/?smiles={% autoescape on %}{{b64smiles}}{% endautoescape %}&width=320&height=320"></center>
+    <br><br>Class-Distribution (first 30)
+    <center><div id="placeholder" style="overflow-x:hidden;overflow-y:hidden;" width="522" height="522"></div></center>
+</div>
+<center>
+<h1>Results</h2>
+<script>
+plot_pie(620,620);
+</script>
+<table>
+<tr>
+    <th style="border:none;"></th>
+    <th>#</th>
+    <th>Target_ID</th>
+    <th>Target_Name</th>
+    <th>Classification</th>
+    <th>#Ligands</th>
+    <th>e-Value</th>
+    <th>mean-TC</th>
+</tr>
+
+
+{% for entry in results %}
+<tr>
+    <td id="{{entry.target}}_button" onclick="ajax_get_cmpd_data('{{entry.target}}','{{b64smiles}}');//show_hide('tr_{{entry.target}}');" style="cursor:pointer;color:#00F;background-color:rgba(192, 192, 184, 1);border-style:solid;border-color: #8E8E95;text-align:center;font-size: 16pt;">+</td>
+    <td>{{forloop.counter0}}</td>
+    <td>{% autoescape off %}<a href="{{entry.targetLink}}">{{entry.target}}</a>{% endautoescape %}</td>
+    <td>{{entry.targetName}}</td>
+    <td>{{entry.classification}}</td>
+    <td>{{entry.compounds_valid}}</td>
+    <td>{{ entry.e_valuestr }}</td>
+    <td>{{entry.tc_avr|floatformat:3}}</td>
+</tr>
+<tr id="tr_{{entry.target}}" style="display: none;">
+    <td></td>
+    <td colspan="8">
+        <table id="table_{{entry.target}}" style="width:100%;">
+        <tr>
+            <th>#</th>
+            <th>Molecule ID</th>
+            <th>Smiles</th>
+            <th>Molecule</th>
+            <th>Standard Value</th>
+            <th class="sorttable_numeric">Tanimoto Coefficient<br>Query vs. Cmpd</th>
+        </tr>
+        </table>
+    </td>
+</tr>
+{% endfor %}
+</table>
+
+</center>
+{% endblock %}

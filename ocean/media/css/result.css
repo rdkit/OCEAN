@@ -1,0 +1,26 @@
+body {
+    font-family: Arial;
+    font-size: 11pt;
+    font-weight:normal;
+
+}
+table {
+    width:80%;
+    background-color: #eee;
+    border-width:medium;
+    border-style:ridge;
+    padding:5px;
+    top:10px;
+    left:200px;
+    font-size: 11pt;
+    font-weight:normal;
+}
+th {
+    border: thin solid;
+}
+td {
+    border: thin dotted blue;
+    padding: 0 2mm;
+    margin: 0;
+    page-break-inside: avoid;
+}

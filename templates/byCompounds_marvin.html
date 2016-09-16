@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block head %}
+
+<title>Search for Neighbourhood by Compounds</title>
+<script type = "text/javascript" src="/media/scripts/jquery.js"> </script>
+<script src="/media/MarvinJS/gui/lib/promise-1.0.0.min.js"></script>
+<script src="/media/MarvinJS/js/marvinjslauncher.js"></script>
+<script LANGUAGE="JavaScript">
+function neighbourhood_search(){
+	MarvinJSUtil.getEditor( "sketch" ).then(function (instance) {
+		var molblock = instance.exportAsMol();
+		if( molblock.match(/^\s*MJ150420\s+[ 0]+999[ ]V2000\s+M\s+END\s*$/) ) return;
+		document.searchForm.molBlock.value=molblock;
+		document.searchForm.action="/findNeighbourhoodForCompounds/";
+		document.searchForm.submit();
+	});
+}
+</script>
+
+{% endblock %}
+
+{% block body %}
+<center>
+neighbourhood-search for proteins<br>
+based on their compounds
+<br><br>
+
+<form enctype="multipart/form-data" action="/findNeighbourhoodForCompounds/" id="searchForm" name="searchForm" onsubmit="getSmiles();" method="post">
+
+smiles:
+<input type="text" name="smiles" id="smiles" value="">
+<textarea name="molBlock" id="molBlock" value="" style="display: none"></textarea>
+<br>
+or sketch:<br>
+<div id="editor">
+    <iframe id="sketch" src="/media/MarvinJS/editorws.html" style="height: 400px; width: 400px;"></iframe>
+</div>
+
+</div>
+<br><br>{% for datasource in datasources %}
+	<input type="radio" id="datasource" name="datasource" value="{{ datasource }}"{% if forloop.first %} checked{% endif %}>{{ datasource }}<br>{% endfor %}
+
+<input type="submit" value="Start OCEAN-Search" onclick="neighbourhood_search()">
+</form>
+</center>
+
+
+
+{% endblock %}

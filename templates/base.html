@@ -1,0 +1,34 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+	{% block head %}{% endblock %}
+	<style>
+		.ocean {
+			color:#3430e7;
+		}
+	</style>
+</head>
+{% block body_raw %}
+<body {% block body_modifications %}{% endblock %}>
+{% block body_start %}{% endblock %}
+	<center><span style="font: 50pt italic; color:#6b68f2;"><b class="ocean">O</b>ptimized <b class="ocean">C</b>ross r<b class="ocean">EA</b>ctivity estimatio<b class="ocean">N</b></span></center>
+		<p>
+		<center>
+			<img src="/media/img/OCEAN_TOC_Version_5_c.png" width="25%">
+		</center>
+	</p>
+	{% block body %}{% endblock %}
+<br><br><br><br><br><br><br><br><br>
+	<p>
+	<div id="footer" class="litnv">
+		<ul>
+			<li><a href="/">ocean Home</a></li>
+		</ul>
+		<ul>
+			<li class="copy">Questions? Comments? Please send an email to <a href="mailto:paul.czodrowski@merckgroup.com">Paul Czodrowski</a> or <a href="mailto:wolf-guido.bolick@gmx.de">Wolf-Guido Bolick</a> - Global Computational Chemistry - Merck KGaA v 0.6</li>
+		</ul>
+	</div>
+	</p>
+</body>
+{% endblock %}
+</html>
