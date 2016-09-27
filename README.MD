@@ -4,7 +4,7 @@ OCEAN - Optimized Cross rEActivity estimatioN
 So what is OCEAN?
 --------
 OCEAN is a web-tool for target-prediction of chemical structures which uses ChEMBL as datasource.
-For more details please feel free to read the [paper](http://www.paper.foo).
+For more details please feel free to read the [paper](http://dx.doi.org/10.1021/acs.jcim.6b00067).
 
 Software dependencies
 --------
