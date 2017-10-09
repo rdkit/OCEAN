@@ -69,7 +69,7 @@ psql chembl_17 < postgres_createOceanDB.sql
 
 # Chembl17 is not a part of myChembl20-VM, so we need to create and populate
 # a few tables (duration <10 sec)
-psql chembl_17 < postgres_createTargetDict.sql
+psql chembl_17 < postgres_createChembl17Tables.sql
 ./importChembl17Tables.sh
 ```
 For ChEMBL20-data you should:
