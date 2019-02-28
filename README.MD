@@ -105,4 +105,4 @@ Now lets try it:
 
 Questions or Problems?
 --------
-If you have any questions or problems with OCEAN please do not hesitate to contact [Paul Czodrowski](mailto:Paul.Czodrowski@merckgroup.com) or [Wolf-Guido Bolick](mailto:wolf-guido.bolick@gmx.de).
+If you have any questions or problems with OCEAN please do not hesitate to contact [Paul Czodrowski](mailto:paul.czodrowski@tu-dortmund.de) or [Wolf-Guido Bolick](mailto:wolf-guido.bolick@gmx.de).
