@@ -1,26 +1,24 @@
 from rdkit import Chem
 
-try:
-    from ocean.tools.db_connector import DB_connector
-except:
-    from tools.db_connector import DB_connector
+# try:
+#     from ocean.tools.db_connector import DB_connector
+# except:
+#     from tools.db_connector import DB_connector
+from ocean.tools.db_connector import DB_connector
 
 from rdkit.DataStructs import TanimotoSimilarity as tc
 import sys
 
-try:
-    from rdkit.Chem.Draw import SimilarityMaps as SM
-except:
-    import ocean.SimilarityMaps as SM
 import numpy as np
 from ocean.models import Rnd_set_comparison,FP_Parameter,DataSources
 
 import random
-from score_calculator import Calculator
-try:
-    import ocean.settings as settings
-except:
-    import settings
+from ocean.tools.score_calculator import Calculator
+from ocean import settings
+# try:
+#     import ocean.settings as settings
+# except:
+#     import settings
 
 import os
 from scipy.stats import genextreme as ge
@@ -96,18 +94,18 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
     """
     http://www.jamesphoughton.com/2013/08/making-gif-animations-with-matplotlib.html
     """
-    print "calcOceanStatistics function start"
+    print("calcOceanStatistics function start")
     db_ocean = DB_connector("default")  # chembl
     cursor = db_ocean.cursor
 
     ds = DataSources.objects.get(name=datasource.name)
     if recalc:
-        print "delete rnd set items for fp",fp
+        print("delete rnd set items for fp", fp)
         Rnd_set_comparison.objects.all().filter(fp=fp).filter(datasource=ds).delete()
-        print "done"
-    print "delete parameter entries for fp",fp
+        print("done")
+    print("delete parameter entries for fp", fp)
     FP_Parameter.objects.all().filter(fp_id=fp).filter(datasource=ds).delete()
-    print "done"
+    print("done")
 
     if not recalc and Rnd_set_comparison.objects.all().filter(fp=fp).filter(datasource=ds).count()==0:
         return "no entries for fp %d, try ?recalc=True" % fp
@@ -128,27 +126,28 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
         from PIL import Image
         from images2gif import writeGif
     except:
-        print >> sys.stderr, "Couldn't import Image from PIL or writeGif from images2gif, so plotting is deactivated now"
+        print("Couldn't import Image from PIL or writeGif from images2gif, so plotting is deactivated now", file=sys.stderr)
         animatedGif = False
 
     plotting = True
     try:
         import matplotlib.pyplot as plt
     except:
-        plotting = True
+        # plotting = True
+        plotting = False
         animatedGif = False
 
     processes = settings.PARALLEL_PROCESSES
     if recalc: walker = Pool(processes=processes)
 
     thresh_list = np.arange(thresh_start,thresh_end,thresh_steps)
-    molecule_ids = np.asarray(FP_MANAGER[datasource][fp].keys())
+    molecule_ids = np.asarray(list(FP_MANAGER[datasource][fp].keys()))
 
     ds = DataSources.objects.get(name=datasource.name)
     for runde in range(repeats):
         if not recalc: continue
 
-        print "runde %d" % runde
+        print(f"runde {runde}")
         result = {}
         rand_lists1 = createRandLists(start,end,steps,molecule_ids)
         rand_lists2 = createRandLists(start,end,steps,molecule_ids)
@@ -160,24 +159,25 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
             result2 = {}
             for data_entry in walker.imap_unordered(get_tc_list_para,tasks,20):
                 result2[data_entry[0]] = data_entry[1]
-                print "addet %d of %d" % (len(result2),len(tasks))
+                print(f"addet {len(result2)} of {len(tasks)}")
         else:
             result2 = {}
             while (len(tasks)>0):
                 task = tasks.pop()
                 score = get_tc_list_para(task)
                 result2[score[0]] = score[1]
-                print "addet %d of %d" % (len(result2),len(tasks))
+                print(f"addet {len(result2)} of {len(tasks)}")
 
-        print "create %d Result-Objects for DB-Table rnd_set_comparison" % (len(thresh_list) * len(result2))
+        print(f"create {len(thresh_list) * len(result2)} Result-Objects for DB-Table rnd_set_comparison")
         with transaction.atomic():
             buffer = []
             for threshold in thresh_list:
-                for key,value in result2.iteritems():
+                # for key,value in result2.iteritems():
+                for key, value in result2.items():
                     raw_score = np.sum(value[value>=threshold])
                     item = (key**2,fp,threshold,raw_score)
                     buffer.append(item)
-            print "created %d buffered items" % len(buffer)
+            print(f"created {len(buffer)} buffered items")
 
             for w,x,y,z in buffer:
                 obj = Rnd_set_comparison(setsize=w,fp=x,threshold=y,rawscore=z,datasource=ds)
@@ -238,7 +238,7 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
                 fig,(r0,r1,r2,r3,r4,r5,r6) = plt.subplots(nrows=7,figsize=(6,14))
 
         raw_mean_func = Calculator.getRawScoreExpFunction(x_data,mean_data)
-        print "\nmean function for threshold: %f is [%s]" % (threshold,raw_mean_func.func_name)
+        print(f"\nmean function for threshold: {threshold} is [{raw_mean_func.func_name}]")
 
         exp_mean_data = [raw_mean_func(en) for en in x_data]
         if plotting:
@@ -252,7 +252,7 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
             r2.set_ylim((0,2.5))
         new_std_function = Calculator.getRawScoreStdDevExpFunction(x_data,stddev_data)
 
-        print "stddev function for threshold: %f is [%s]" % (threshold,new_std_function.func_name)
+        print(f"stddev function for threshold: {threshold} is [{new_std_function.func_name}]")
 
         newdata2 = new_std_function(x_data)
 
@@ -316,15 +316,15 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
         chisq_mean = normalizedChisquare(observed,expected_norm)
         chisq_evd = normalizedChisquare(observed,expected_evd)
 
-        print "chisquare_norm",chisq_mean
-        print "chisquare_evd",chisq_evd
+        print("chisquare_norm", chisq_mean)
+        print("chisquare_evd", chisq_evd)
 
         #django doesn't like inf or -inf in float-fields of oracle database, so we change it..
         if isinf(chisq_mean) or isnan(chisq_mean):
-            print "chisquare_norm seems to be inf or nan (%s), change to -1.0" % str(chisq_mean)
+            print(f"chisquare_norm seems to be inf or nan ({str(chisq_mean)}), change to -1.0")
             chisq_mean = -1.0
         if isinf(chisq_evd) or isnan(chisq_evd):
-            print "chisquare_evd seems to be inf or nan (%s), change to -1.0" % str(chisq_evd)
+            print(f"chisquare_evd seems to be inf or nan ({str(chisq_evd)}), change to -1.0")
             chisq_evd = -1.0
 
         if plotting:
@@ -346,7 +346,7 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
             if not skip_3_to_6: r5.plot(bins,y)
 
         if threshold==thresh_list[-1]:      #this is last round
-            print "last round"
+            print("last round")
 
             query = "select threshold,chisquare_mean,chisquare_evd from ocean_fp_parameter where fp_id=%d and datasource_id=%d order by threshold" % (fp,ds.id)
             cursor.execute(query)
@@ -358,7 +358,7 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
                 data_chi2_mean.append(float(val[1]))
                 data_chi2_evd.append(float(val[2]))
 
-            print x_chidata,data_chi2_mean,data_chi2_evd
+            print(x_chidata, data_chi2_mean, data_chi2_evd)
 
             if plotting:
                 if not skip_3_to_6: r6.plot(x_chidata,data_chi2_mean,'o')
@@ -371,15 +371,15 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
             if p[0]==0:
                 return np.exp(-np.exp(-x))*np.exp(-x)
             else:
-                print p[0],type(x)
+                print(p[0], type(x))
                 return np.exp(-(1-p[0]*x)**(1/p[0]))*(1-p[0]*x)**(1/p[0]-1)
         errfunc = lambda p,x,y: (y-fitfunc(p,x))
 
-        init = [0.2]
-
-        bins = bins[:-1]
-        bins = np.array(bins)
-        n = np.array(n)
+        # init = [0.2]
+        if plotting:
+            bins = bins[:-1]
+            bins = np.array(bins)
+            n = np.array(n)
 
         if plotting:
             plt.tight_layout()
@@ -389,7 +389,7 @@ def calc_ocean_parameter(FP_MANAGER, fp, datasource, recalc=False):
 
     if animatedGif:
         file_names = figures
-        print "d",file_names
+        print("d", file_names)
         images = [Image.open(fn) for fn in file_names]
         writeGif("animation_mean_stddev.gif",images,duration=0.5)
         for image in images:

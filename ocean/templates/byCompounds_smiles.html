@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block head %}
+
+<title>Search for Neighbourhood by Compounds</title>
+<script type = "text/javascript" src="/static/scripts/jquery.js"> </script>
+
+{% endblock %}
+
+{% block body %}
+<center>
+neighbourhood-search for proteins<br>
+based on their compounds
+<br><br>
+
+<form enctype="multipart/form-data" action="/findNeighbourhoodForCompounds/" id="searchForm" name="searchForm" onsubmit="getSmiles();" method="post">
+
+smiles:
+<input type="text" name="smiles" id="smiles" value="">
+<textarea name="molBlock" id="molBlock" value="" style="display: none"></textarea>
+
+</div>
+<br><br>{% for datasource in datasources %}
+	<input type="radio" id="datasource" name="datasource" value="{{ datasource }}"{% if forloop.first %} checked{% endif %}>{{ datasource }}<br>{% endfor %}
+
+<input type="submit" value="Start OCEAN-Search" onclick="neighbourhood_search()">
+</form>
+</center>
+
+
+
+{% endblock %}

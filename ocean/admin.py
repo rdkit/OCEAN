@@ -17,4 +17,4 @@ if os.path.exists('ocean/custom_admin.py'):
         if not entry in current_locals.keys() or \
                         entry in []:
             current_locals.update({entry:value})
-            print "load custom admin",entry,value
+            print("load custom admin",entry,value)

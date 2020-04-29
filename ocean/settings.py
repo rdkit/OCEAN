@@ -5,7 +5,9 @@ from platform import node
 from os.path import dirname
 from enum import Enum
 from rdkit import Chem
-import SimilarityMaps as SM
+from rdkit.Chem import AllChem
+# import SimilarityMaps as SM
+from rdkit.Chem.Draw.SimilarityMaps import GetAPFingerprint, GetTTFingerprint
 from rdkit.Chem import MACCSkeys
 
 
@@ -25,8 +27,9 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',  # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
         'NAME': 'ocean',  # Or path to database file if using sqlite3.
 #         # The following settings are not used with sqlite3:
+        'HOST': '127.0.0.1',
         'USER': 'ocean_user',
-        'PASSWORD': 'ocean_pw',
+        'PASSWORD': 'ocean',
 #         'HOST': '',                      # Empty for localhost through domain sockets or '127.0.0.1' for localhost through TCP.
 #         # 'PORT': '',                      # Set to empty string for default.
     },
@@ -36,15 +39,25 @@ DATABASES = {
         'NAME': 'chembl_17',  # Or path to database file if using sqlite3.
         #         # The following settings are not used with sqlite3:
         'USER': 'ocean_user',
-        'PASSWORD': 'ocean_pw',
+        'PASSWORD': 'ocean',
     },
     'chembl_20':{
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
     # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+        'HOST': '127.0.0.1',
         'NAME': 'chembl_20',  # Or path to database file if using sqlite3.
         #         # The following settings are not used with sqlite3:
         'USER': 'ocean_user',
-        'PASSWORD': 'ocean_pw',
+        'PASSWORD': 'ocean',
+    },
+    'chembl_25': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+        'HOST': '127.0.0.1',
+        'NAME': 'chembl_25',  # Or path to database file if using sqlite3.
+        #         # The following settings are not used with sqlite3:
+        'USER': 'chembl',
+        'PASSWORD': 'chembl',
     }
 }
 
@@ -52,10 +65,21 @@ FP_METHODS = [Chem.RDKFingerprint,
               Chem.LayeredFingerprint,
               Chem.PatternFingerprint,
               MACCSkeys.GenMACCSKeys,
-              SM.GetAPFingerprint,
-              SM.GetTTFingerprint,
-              SM.GetMorganFingerprint,
+              GetAPFingerprint,
+              GetTTFingerprint,
+              # AllChem.GetMorganFingerprintAsBitVect,
+            AllChem.GetMorganFingerprint,
               ]
+
+FP_METHODS_PARAMS = [None,
+                     None,
+                     None,
+                     None,
+                     None,
+                     None,
+                     # [[2],dict(nBits=2048)], # Morgan-FP radius 3,2048 bits
+                     [[2],dict()] # for radius 2; unfolded (fullSize) MorganFP
+                     ]
 
 SCORING_PARAMS = {
     'CHEMBL':
@@ -72,7 +96,9 @@ CALC_OCEAN_PARAMETER_START = 10
 CALC_OCEAN_PARAMETER_END = 316
 CALC_OCEAN_PARAMETER_STEPS = 1
 CALC_OCEAN_PARAMETER_THRESH_START = 0.01
+# CALC_OCEAN_PARAMETER_THRESH_START = 0.29
 CALC_OCEAN_PARAMETER_THRESH_END = 1.00
+# CALC_OCEAN_PARAMETER_THRESH_END = 0.33
 CALC_OCEAN_PARAMETER_THRESH_STEPS = 0.01
 
 OCEAN_DB_TABLE = 'ocean_db'
@@ -114,10 +140,11 @@ del(csv_header_tmp)
 
 CMPD_COUNT_CUTOFF = 10
 CMPD_NM_CUTOFF = 10000
-PARALLEL_PROCESSES =  4 # 45 # for server, 4 for workstation
+# PARALLEL_PROCESSES =  4 # 45 # for server, 4 for workstation
+PARALLEL_PROCESSES =  6 # for my workstation
 ORGANISM = "Homo sapiens"
 
-CHEMBL_VERSION = "chembl_%d" % (20)
+CHEMBL_VERSION = "chembl_%d" % (25)
 
 SUBDOMAIN = 'ocean'
 HTTP_PORT = '8081'
@@ -166,7 +193,8 @@ MEDIA_URL = '/ocean_media/'
 # Don't put anything in this directory yourself, store your static files
 # in apps' "static/" subdirectories and in STATICFILES_DIRS.
 # Example: "/var/www/example.com/static/"
-STATIC_ROOT = ''
+# STATIC_ROOT = ''
+STATIC_ROOT = os.path.join(PROJECT_ROOT, '../static')
 
 # URL prefix for static files.
 # Example: "http://example.com/static/", "http://static.example.com/"
@@ -181,11 +209,11 @@ STATICFILES_DIRS = (
 
 # List of finder classes that know how to find static files in
 # various locations.
-STATICFILES_FINDERS = (
-    'django.contrib.staticfiles.finders.FileSystemFinder',
-    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
-    #    'django.contrib.staticfiles.finders.DefaultStorageFinder',
-)
+# STATICFILES_FINDERS = (
+#     'django.contrib.staticfiles.finders.FileSystemFinder',
+#     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+#     #    'django.contrib.staticfiles.finders.DefaultStorageFinder',
+# )
 
 
 
@@ -196,14 +224,21 @@ TEMPLATE_LOADERS = (
     #     'django.template.loaders.eggs.Loader',
 )
 
-MIDDLEWARE_CLASSES = (
+MIDDLEWARE = (
+    'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    
+    # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    # Uncomment the next line for simple clickjacking protection:
-    # 'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # 'django.contrib.sessions.middleware.SessionMiddleware',
+    # 'django.middleware.common.CommonMiddleware',
+    #
+    # 'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # 'django.contrib.messages.middleware.MessageMiddleware',
+    # # Uncomment the next line for simple clickjacking protection:
+    # # 'django.middleware.clickjacking.XFrameOptionsMiddleware',
 )
 
 ROOT_URLCONF = 'ocean.urls'
@@ -217,6 +252,23 @@ TEMPLATE_DIRS = (
     # Always use forward slashes, even on Windows.
     # Don't forget to use absolute paths, not relative paths.
 )
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
 
 INSTALLED_APPS = (
     'django.contrib.auth',
@@ -275,4 +327,4 @@ if os.path.exists('ocean/custom_settings.py'):
     current_locals = locals()
     for entry,value in msee.items():
         current_locals.update({entry:value})
-        print >> sys.stderr, "monkey patch custom setting", entry, value
+        print("monkey patch custom setting", entry, value, file=sys.stderr)

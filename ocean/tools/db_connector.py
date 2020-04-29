@@ -54,7 +54,7 @@ class DB_connector:
         if count>1000: raise Exception("can fetch max 1000 entries")
         import random
         count_entries = self.getCompoundCount()
-        print count_entries
+        print(count_entries)
 
         rstr = "(" + str(random.randint(1,count_entries))
 
@@ -127,9 +127,9 @@ class DB_connector:
         self.cursor.execute(final_query)
         iterator = self.cursor.__iter__()
         if molregno == -1:
-            result = [(hits[0],hits[1],hits[2],hits[3],hits[4],hits[5]) for hits in iterator]
+            result = [(hits[0],hits[1],hits[2],hits[3],hits[4],f"{hits[5]:.2f}") for hits in iterator]
         else:
-            result = [(hits[0],hits[1],hits[2],hits[3],hits[4],hits[5]) for hits in iterator][0]
+            result = [(hits[0],hits[1],hits[2],hits[3],hits[4],f"{hits[5]:.2f}") for hits in iterator][0]
         return result
 
     def getMolregnoForSmiles(self,smiles):
@@ -225,7 +225,7 @@ class DB_connector:
                 query = "select min(target_chembl_id) from %s group by target_chembl_id" % ocean.settings.OCEAN_DB_TABLE
 
         final_query = query
-        print "query is", final_query
+        print("query is", final_query)
         self.cursor.execute(final_query)
 
         result = [t[0] for t in self.cursor.__iter__()]
@@ -238,4 +238,4 @@ if os.path.exists('ocean/tools/custom_db_connector.py'):
     for entry,value in cdc.items():
         if not entry in current_locals.keys():
             current_locals.update({entry:value})
-            print >> sys.stderr, "monkey patch custom db_connector",entry,value
+            print("monkey patch custom db_connector", entry, value, file=sys.stderr)

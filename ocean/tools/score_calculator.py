@@ -65,7 +65,7 @@ class Calculator:
             else:
                 return exp(-(1-c*x)**(1/c))*(1-c*x)**(1/c-1)
         fp,fc = curve_fit(fitfunc,x_data,y_data)
-        print fp,fc
+        print(fp, fc)
         return lambda x: fp[1]*np.log(x*fp[0]+fp[2])+fp[3]
 
     @staticmethod

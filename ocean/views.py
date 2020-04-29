@@ -2,24 +2,25 @@ from django.shortcuts import render_to_response
 from django.http import HttpResponse
 
 from rdkit import Chem
-from tools import ocean_kit
+from ocean.tools import ocean_kit
 import base64
-try:
-    from rdkit.Chem.Draw import SimilarityMaps as SM
-except:
-    try:
-        import SimilarityMaps as SM
-    except:
-        import ocean.SimilarityMaps as SM
-import cPickle
+# try:
+#     from rdkit.Chem.Draw import SimilarityMaps as SM
+# except:
+#     try:
+#         import SimilarityMaps as SM
+#     except:
+#         import ocean.SimilarityMaps as SM
+import pickle
 import time
-from tools.score_calculator import Calculator
+from ocean.tools.score_calculator import Calculator
 from ocean.models import *
 from multiprocessing import Pool, Process, Queue, Lock, Manager, Pipe
 from xml.etree.ElementTree import Element,SubElement,tostring
 from rdkit.Chem import Draw
 from collections import deque
 import random
+import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 manager = Manager()
@@ -43,36 +44,41 @@ def loadFPS(fp=None,datasource=None):
         for datasource in settings.DATASOURCES:
             if fp is None:
                 fp = settings.SCORING_PARAMS[datasource.name]['FP']
-            print "recursive call loadFPS for fp {} and datasource {}".format(fp, datasource)
+            print(f"recursive call loadFPS for fp {fp} and datasource {datasource}")
             loadFPS(fp,datasource)
     else:
         dn = datasource if type(datasource) is str else datasource.name
         if fp is None:
             fp = settings.SCORING_PARAMS[dn]['FP']
-        print "load FP {} for datasource {}".format(fp, datasource)
+        print(f"load FP {fp} for datasource {datasource}")
         FP_MANAGER.loadFPsFromDataSource(datasource,fp)
 
 def init():
-    print "databases",settings.DATABASES
-    print >>sys.stderr,"1: Load Fingerprints"
+    print("databases",settings.DATABASES)
+    print("1: Load Fingerprints", file=sys.stderr)
     loadFPS()
 
-    print >>sys.stderr,"3: Load Protein-Classifications"
+    print("3: Load Protein-Classifications", file=sys.stderr)
     Protein_Classifications.getClassifications()
 
-    print >>sys.stderr,"4: Load Target-Compound Relationships"
+    print("4: Load Target-Compound Relationships", file=sys.stderr)
     Target_Compounds.fill()
 
 def createFPforEntry(data):
-    id,smiles,fp=data[0],data[1],data[2]
+    id,smiles,fp,fpParams=data[0],data[1],data[2],data[3]
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return id,None
-    fingerprint = settings.FP_METHODS[fp](mol)
+    if fpParams is None:
+        fingerprint = settings.FP_METHODS[fp](mol)
+    else:
+        fingerprint = settings.FP_METHODS[fp](mol,*fpParams[0],**fpParams[1])
+
     return id,fingerprint
 
+# wget "http://127.0.0.1:8000/createfps?fp=6&datasource=CHEMBL" -O -
 def createAllFPSforAllMolregnos(request):
-    print "createAllFPSforMolregnos requested"
+    print("createAllFPSforMolregnos requested")
 
     result_dict = {}
     fp = None
@@ -82,7 +88,7 @@ def createAllFPSforAllMolregnos(request):
         fp = request.GET.get(u'fp')
     if u'datasource' in request.GET and request.GET.get(u'datasource')!='':
         datasource = request.GET.get(u'datasource')
-    
+
     if u'fp' in request.POST and request.POST.get(u'fp')!='':
         fp = request.POST.get(u'fp')
     if u'datasource' in request.POST and request.POST.get(u'datasource')!='':
@@ -96,37 +102,39 @@ def createAllFPSforAllMolregnos(request):
     datasource = settings.DATASOURCES[datasource]
 
     All_FPS.objects.filter(fp_id = fp).filter(datasource=DataSources.objects.get(name=datasource.name)).delete()
-    print "fp is",fp
+    print("fp is", fp)
 
     datasources = [x.name for x in settings.DATASOURCES]
 
     for ds in datasources:
         current_sources = DataSources.objects.filter(name=ds)
         if current_sources.count()==0:
-            print "no DataSource entry in DB for {} .. create entry".format(ds)
+            print(f"no DataSource entry in DB for {ds} .. create entry")
             new_entry = DataSources(name=ds)
             new_entry.save()
 
     dict_pack_size = 20000
+    # dict_pack_size = 1000 #just for testing
     pool = Pool(processes=settings.PARALLEL_PROCESSES)
-    print "add Fingerprints {0} to DataSource {1}".format(fp,datasource.name)
+    print(f"add Fingerprints {fp} to DataSource {datasource.name}")
 
     idAndSmiles = DataSources.getDataSourceActivities(datasource)
-
-    new_idAndSmiles = [(x[0],getLargestFragment(x[1]),fp) for x in idAndSmiles]
+    # idAndSmiles = DataSources.getDataSourceActivities(datasource)[:10000] #just for testing
+    fpParams = settings.FP_METHODS_PARAMS[fp]
+    new_idAndSmiles = [(x[0],getLargestFragment(x[1]),fp,fpParams) for x in idAndSmiles]
     i2 = 0
     for datapoint in pool.imap_unordered(createFPforEntry, new_idAndSmiles, 50):
         if i2 % 10000 == 0:
-            print i2
+            print(i2)
 
         id,fingerprint = datapoint
         if fingerprint is not None:
             result_dict[id] = fingerprint
 
         if i2 % dict_pack_size == 0 and i2>0:
-            print "pack dict into pickle and save into db"
-            pickle = cPickle.dumps(result_dict,2)
-            entry = All_FPS(fp_dict=pickle,fp_id = fp,datasource=DataSources.objects.get(name=datasource.name))
+            print("pack dict into pickle and save into db")
+            p_data = pickle.dumps(result_dict,2)
+            entry = All_FPS(fp_dict=p_data,fp_id = fp,datasource=DataSources.objects.get(name=datasource.name))
             entry.save()
             result_dict.clear()
 
@@ -134,14 +142,14 @@ def createAllFPSforAllMolregnos(request):
 
     # we have to save the last (smaller than dict_pack_size) chunk too!
     if len(result_dict)>0:
-        pickle = cPickle.dumps(result_dict,2)
-        entry = All_FPS(fp_dict=pickle,fp_id = fp,datasource=DataSources.objects.get(name=datasource.name))
+        p_data = pickle.dumps(result_dict,2)
+        entry = All_FPS(fp_dict=p_data,fp_id = fp,datasource=DataSources.objects.get(name=datasource.name))
         entry.save()
         result_dict.clear()
 
-    print "save last fp_dict"
+    print("save last fp_dict")
 
-    print "load FPS of Datasource {0} into Memory again".format(datasource.name)
+    print(f"load FPS of Datasource {datasource.name} into Memory again")
     loadFPS(fp,datasource)
 
     report = "Saved {0} Items of FP {1} for DataSource {2}".format(i2,fp,datasource.name)
@@ -191,11 +199,11 @@ def findNeighbourhoodForCompounds(request):
     datasource = req[u'datasource']
     datasource = settings.DATASOURCES[datasource]
 
-    print "smiles: %s" % str(smiles)
+    print(f"smiles: {smiles}")
 
-    print "datasource: {0}".format(datasource.name)
+    print(f"datasource: {datasource.name}")
 
-    print "############"
+    print("#" * 10)
 
     searchBuffer_lock.acquire()
     searchBuffer_dict = dict(list(searchBuffer))
@@ -231,11 +239,11 @@ def findNeighbourhoodForCompounds(request):
         root = '<?xml version="1.0" encoding="UTF-8"?>' + tostring(root)
         return HttpResponse(root,content_type="text/xml")
 
-    print "ranked by compare {0} Targets".format(len(ranked_targets))
+    print(f"ranked by compare {len(ranked_targets)} Targets")
 
     b64smiles = "".join(smilesTobase64(smiles[0]).splitlines())
-    print "b64_smiles [%s]" % b64smiles
-    print "request finished:",time.time() - start
+    print(f"b64_smiles [{b64smiles}]")
+    print("request finished:", time.time() - start)
     return render_to_response("searchResults.html",{"results" : ranked_targets,
                                                     "smiles"  : smiles[0],
                                                     "b64smiles": b64smiles,
@@ -253,8 +261,12 @@ def getTC(smiles,molecule_id,fp,datasource):
     else:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            print >>sys.stderr, "couldn't create molecule of smiles",smiles
-        fpThis = settings.FP_METHODS[fp](mol)
+            print(f"couldn't create molecule of smiles {smiles}", file=sys.stderr)
+        fpParam = settings.FP_METHODS_PARAMS[fp]
+        if fpParam is None:
+            fpThis = settings.FP_METHODS[fp](mol)
+        else:
+            fpThis = settings.FP_METHODS[fp](mol, *fpParam[0], **fpParam[1])
         FP_VAULT[datasource][fp][smiles] = fpThis
 
     fpThat = FP_MANAGER[datasource][fp][molecule_id]
@@ -262,11 +274,11 @@ def getTC(smiles,molecule_id,fp,datasource):
     return tc
 
 def base64toSmiles(base64string):
-    smiles = base64.decodestring(base64string)
+    smiles = base64.decodestring(base64string.encode()).decode()
     return smiles
 
 def smilesTobase64(smiles):
-    base64string = base64.encodestring(smiles)
+    base64string = base64.encodestring(smiles.encode()).decode()
     return base64string
 
 def getCmpdsForTargetOfDatasource(target,datasource):
@@ -306,7 +318,10 @@ def getCmpdsForTarget(request):
             if attributes[i] == "molecule_chembl_id":
                 link = settings.DATASOURCE_LINK_COMPOUND[datasource.name].format(entry[i])
                 # print "link is",link
-                child_prop.text = "<a href='{0}'>{1}</a>".format(link,entry[i])
+                link_child = SubElement(child_prop,"a",dict(href=link))
+                link_child.text = entry[i]
+                # child_prop.attrib[]
+                # child_prop.text = "<a href='{0}'>{1}</a>".format(link,entry[i])
             elif attributes[i] == "molregno":
                 continue
             elif attributes[i] == "tc":
@@ -317,8 +332,127 @@ def getCmpdsForTarget(request):
             else:
                 child_prop.text = str(entry[i])
 
-    root = '<?xml version="1.0" encoding="UTF-8"?>' + tostring(root)
+    # root = '<?xml version="1.0" encoding="UTF-8"?>' + tostring(root)
+    root = '<?xml version="1.0" encoding="UTF-8"?>' + tostring(root,encoding="unicode")
     return HttpResponse(root,content_type="text/xml")
+
+
+def getOceanReportForSmiles(request):
+    """
+    Requires parameters: datasource, query_smiles, query_id
+    optionally: print_header, (topn_targets[default; 10] or t_threshold), (topn_compounds[default; 10], c_threshold)
+
+    example: datasource=CHEMBL, query_smiles=CCNC, query_ID=random_name, print_header=1, t_threshold=1.0E-2, c_threshold=0.3
+    :param request:
+    :return:
+    """
+    HEADER_LIST = ["QUERY_CMPD_ID","QUERY_CMPD_SMILES","TARGET","TARGET_FAMILY","EVALUE","ACTIVE_CMPD_ID","ACTIVE_CMPD_SMILES","ACTIVITY","TC"]
+
+    postGetMerge = request.GET.copy()
+    postGetMerge.update(request.POST)
+
+    print_header = postGetMerge.get(u"print_header")
+    datasource = postGetMerge.get(u"datasource")
+    query_smiles = postGetMerge.get(u"query_smiles")
+    query_id = postGetMerge.get(u"query_id")
+
+    datasource = settings.DATASOURCES[datasource]
+
+    # targetMode 0 means top N (defaults to 10) Targets sorted by e-Value;
+    # targetMode 1 means only Targets with e-Value smaller threshold; sorted by e-Value;
+    targetMode = 0
+    topn_targets = 10
+    t_threshold = 1E-3
+
+    if postGetMerge.get(u"topn_targets") is not None and postGetMerge.get(u"t_threshold") is not None:
+        return HttpResponse("Please specify ether topn_targets OR t_treshold.. not both", content_type="text/csv")
+    topn_tmp = postGetMerge.get(u"topn_targets")
+    tT_tmp = postGetMerge.get(u"t_threshold")
+    if topn_tmp is not None:
+        targetMode = 0
+        topn_targets = int(topn_tmp)
+    if tT_tmp is not None:
+        targetMode = 1
+        t_threshold = float(tT_tmp)
+
+
+    # compoundMode 0 means top N (defaults to 10) Compounds sorted by TC;
+    # compoundMode 1 means only Compounds TC higher than threshold; sorted by TC;
+    compoundMode = 0
+    topn_compounds = 10
+    c_threshold = settings.SCORING_PARAMS[datasource.name]['THRESHOLD']
+
+    if postGetMerge.get(u"topn_compounds") is not None and postGetMerge.get(u"c_threshold") is not None:
+        return HttpResponse("Please specify ether topn_compounds OR c_threshold.. not both", content_type="text/csv")
+    topn_tmp = postGetMerge.get(u"topn_compounds")
+    cT_tmp = postGetMerge.get(u"c_threshold")
+    if topn_tmp is not None:
+        compoundMode = 0
+        topn_compounds = int(topn_tmp)
+    if cT_tmp is not None:
+        compoundMode = 1
+        c_threshold = float(cT_tmp)
+
+    if print_header is None:
+        print_header = False
+    else:
+        print_header = print_header == '1'
+
+    query_smiles = getLargestFragment(query_smiles)
+    query_mol = Chem.MolFromSmiles(query_smiles)
+
+    if query_mol is None:
+        return HttpResponse(f"{query_id},{query_smiles}," + ",".join(["ERROR"] * 7), content_type="text/csv")
+
+    fp = settings.SCORING_PARAMS[datasource.name]['FP']
+    threshold = settings.SCORING_PARAMS[datasource.name]['THRESHOLD']
+
+    ranked_targets = getRankedTargetList(query_smiles, verbose=False, datasources=datasource, fp=fp,
+                                         fp_threshold=threshold)
+
+    fpParam = settings.FP_METHODS_PARAMS[fp]
+    if fpParam is None:
+        query_fp = settings.FP_METHODS[fp](query_mol)
+    else:
+        query_fp = settings.FP_METHODS[fp](query_mol, *fpParam[0], **fpParam[1])
+
+    output_string = ""
+    if print_header:
+        output_string += ",".join(HEADER_LIST) + "\n"
+
+    t_counter = 0
+    for target in ranked_targets:
+        if targetMode == 0 and t_counter >= topn_targets:
+            break
+        if targetMode == 1 and target.e_value > t_threshold:
+            break
+        t_counter += 1
+
+        target_compounds_data = {k[0]:[k[1],k[4],k[5]] for k in getCmpdsForTargetOfDatasource(target.target, datasource)} # list of [molregno,molecule_chembl_id,target_pref_name,organism,canonical_smiles,standard_value]
+        target_compounds = Target_Compounds.vault[datasource].get(target.target)['cmpds']
+        target_compounds_tc = [0.0] * len(target_compounds)
+        for i,tc in enumerate(target_compounds):
+            tc_fp = FP_MANAGER[datasource][fp][tc]
+            target_compounds_tc[i] = ocean_kit.get_tc(query_fp, tc_fp)
+
+        target_compounds_results_zipped = zip(target_compounds_tc, target_compounds)
+        target_compounds_results_zipped_sorted = sorted(target_compounds_results_zipped, reverse=True, key=lambda x: x[0])
+
+        c_counter = 0
+        for e in target_compounds_results_zipped_sorted:
+            if compoundMode == 0 and c_counter >= topn_compounds:
+                break
+            if compoundMode == 1 and e[0] < c_threshold:
+                break
+            c_counter += 1
+            compound_data = target_compounds_data[e[1]]
+            DATA_LIST = [query_id, query_smiles, target.target, target.classification, target.e_value, compound_data[0], compound_data[1],
+                         compound_data[2], e[0]]
+            DATA_LIST_string = list(map(lambda x: str(x),DATA_LIST))
+
+            output_string += ",".join(DATA_LIST_string) + "\n"
+
+    return HttpResponse(output_string, content_type="text/csv")
 
 def calcOceanHits_parallel(pipe, target_jobs, fp, fp_thresh, datasource):
     target_job_info = []
@@ -334,7 +468,7 @@ def calcOceanHits_parallel(pipe, target_jobs, fp, fp_thresh, datasource):
         except KeyboardInterrupt:
             time.sleep(0.8*random.random())
             pipe.close()
-            print "Close Thread"
+            print("Close Thread")
             return
 
         if data == 'die':
@@ -382,9 +516,9 @@ def getRankedTargetList(smiles,
             if datasource not in datasources or datasource in ProcessManager.datasources:
                 continue
             if not fp in FP_MANAGER[datasource]:
-                print "Fingerprint %d is not in FP_MANAGER " % fp, FP_MANAGER[datasource].keys()
+                print(f"Fingerprint {fp} is not in FP_MANAGER {FP_MANAGER[datasource].keys()}")
                 loadFPS(datasource=datasource, fp=fp)
-                print "Fingerprint-Set %d loaded into %s" % (fp,datasource.name)
+                print(f"Fingerprint-Set {fp} loaded into {datasource.name}")
 
             if targetList is None:
                 targetList = Target_Compounds.getTargets(datasource)
@@ -404,7 +538,7 @@ def getRankedTargetList(smiles,
             thread_chunk_size = 0
             for ti_entry in ti:
                 if ti_entry[1] < cutoff:
-                    print "target {0} has to few cmpds {1}".format(ti_entry[0], ti_entry[1])
+                    print(f"target {ti_entry[0]} has to few cmpds {ti_entry[1]}")
                 thread_chunk.append(ti_entry[0]) #add target_id to chunk
                 thread_chunk_size += ti_entry[1] #increads current chunk_size
                 unallocated_cmpds -= ti_entry[1]
@@ -427,16 +561,20 @@ def getRankedTargetList(smiles,
                 p = ProcessManager(process, p1, p2, datasource)
             ProcessManager.datasources.add(datasource)
 
-            print "start {0} Processes".format(len(ProcessManager.pm))
+            print(f"start {len(ProcessManager.pm)} Processes")
             ProcessManager.start_all()
 
     smiles = getLargestFragment(smiles)
-    query_fp = [settings.FP_METHODS[fp](Chem.MolFromSmiles(smiles))]
+    fpParam=settings.FP_METHODS_PARAMS[fp]
+    if fpParam is None:
+        query_fp = [settings.FP_METHODS[fp](Chem.MolFromSmiles(smiles))]
+    else:
+        query_fp = [settings.FP_METHODS[fp](Chem.MolFromSmiles(smiles), *fpParam[0], **fpParam[1])]
 
     tii = time.time()
     ProcessManager.send_all((smiles,query_fp),datasources)
     result = ProcessManager.recv_all(datasources)
-    print "duration",time.time()-tii
+    print("duration", time.time()-tii)
 
     tmp_cache = {}
     fp_tmp = None
@@ -497,6 +635,7 @@ def getLargestFragment(smiles):
     largest = sorted(smiles.split('.'),key=lambda x: len(x),reverse=True)[0]
     return largest
 
+# wget "http://127.0.0.1:8000/calc?fp=6&datasource=CHEMBL&recalc=True" -O -
 def calcOceanStatistics(request):
     fp = None
     datasource = None
@@ -520,7 +659,7 @@ def calcOceanStatistics(request):
 
     recalc = True if request.GET.get(u'recalc') == 'True' else False
 
-    print "statistical recalculation requested for FP {0} of DataSource {1}".format(fp,datasource.name)
+    print(f"statistical recalculation requested for FP {fp} of DataSource {datasource.name}")
     cpd_fps = {}
     i = 0
 
@@ -565,6 +704,6 @@ if os.path.exists('ocean/custom_views.py'):
                         entry in ['init',
                                   'getCmpdsForTargetOfDatasource']:
             current_locals.update({entry:value})
-            print >> sys.stderr, "monkey patch custom view",entry,value
+            print("monkey patch custom view", entry,value, file=sys.stderr)
 
 init()

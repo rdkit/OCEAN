@@ -2,9 +2,13 @@ from django.conf       import settings
 from django.db         import models
 
 import numpy as np
-import settings
-from tools.db_connector import DB_connector
+# import settings
+from ocean import settings
+
+from ocean.tools.db_connector import DB_connector
+
 import os,sys
+import pickle
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -35,7 +39,7 @@ DataSources:"""
         return True
 
     def loadFPsFromDataSource(self,datasource,fp_id):
-        import cPickle
+        # import pickle
         if datasource in settings.DATASOURCES:
             if not fp_id in self.fp_vault[datasource]:
                 self.fp_vault[datasource][fp_id] = {}
@@ -44,8 +48,8 @@ DataSources:"""
 
             ds = DataSources.objects.filter(name=datasource.name)
             if ds.count()==0:
-                print >> sys.stderr, "Datasource {} does not exist".format(datasource.name)
-                print >> sys.stderr, "create Datasource {}".format(datasource.name)
+                print(f"Datasource {datasource.name} does not exist", file=sys.stderr)
+                print(f"create Datasource {datasource.name}", file=sys.stderr)
                 new_ds = DataSources(name=datasource.name)
                 new_ds.save()
                 ds = DataSources.objects.filter(name=datasource.name)
@@ -54,14 +58,15 @@ DataSources:"""
             i = 0
             for entry in all_fps:
                 i+=1
-                if type(entry.fp_dict) is buffer:
-                    tmp_dict = cPickle.loads(str(entry.fp_dict))
-                else:
-                    tmp_dict = cPickle.loads(entry.fp_dict)
+                # if type(entry.fp_dict) is buffer:
+                #     tmp_dict = pickle.loads(str(entry.fp_dict))
+                # else:
+                tmp_dict = pickle.loads(entry.fp_dict)
                 self.fp_vault[datasource][fp_id].update(tmp_dict)
             if i == 0:
-                print >> sys.stderr, "Datasource {} is empty!".format(datasource.name)
-            if self.verbose: print "loaded {0} Entries of {1}, FP {2} into fp_vault".format(len(self.fp_vault[datasource][fp_id]),datasource,fp_id)
+                print(f"Datasource {datasource.name} is empty!", file=sys.stderr)
+            if self.verbose:
+                print(f"loaded {len(self.fp_vault[datasource][fp_id])} Entries of {datasource}, FP {fp_id} into fp_vault")
         else:
             raise Exception("unknown DataSource")
 
@@ -70,9 +75,9 @@ DataSources:"""
             x = All_FPS.objects.filter(datasource=source).values('fp_id').distinct()
             for fp in x:
                 fp_id = fp['fp_id']
-                print "load source.name",source.name
-                print "this is datasource",settings.DATASOURCES[source.name]
-                print "of datasources",settings.DATASOURCES
+                print("load source.name", source.name)
+                print("this is datasource", settings.DATASOURCES[source.name])
+                print("of datasources", settings.DATASOURCES)
                 self.loadFPsFromDataSource(settings.DATASOURCES[source.name], fp_id)
         pass
 
@@ -99,7 +104,7 @@ class Target_Compounds:
 
     @staticmethod
     def setTargets(datasource,targets):
-        print "set {0} targets for {1}".format(len(targets),datasource)
+        print(f"set {len(targets)} targets for {datasource}")
         Target_Compounds.targets[datasource] = set(targets)
 
     @staticmethod
@@ -122,7 +127,7 @@ class Target_Compounds:
         for datasource in settings.DATASOURCES:
             if not datasource in Target_Compounds.vault:
                 Target_Compounds.vault[datasource] = {}
-            print "Collect Target-Compounds of Dataset {0}".format(datasource.name)
+            print(f"Collect Target-Compounds of Dataset {datasource.name}")
             if datasource is settings.DATASOURCES.CHEMBL:
                 chembl_connection = DB_connector(settings.CHEMBL_VERSION)
                 chembl_connection.setFilter("and standard_value < %d" % settings.CMPD_NM_CUTOFF)
@@ -212,12 +217,12 @@ class ProcessManager:
 
     @staticmethod
     def kill_all():
-        print "kill all processes"
+        print("kill all processes")
         for p in ProcessManager.pm:
             p.send('die')
 
         ProcessManager.join_all()
-        print "done"
+        print("done")
         ProcessManager.pm = []
 
     @staticmethod
@@ -340,7 +345,7 @@ class Rnd_set_comparison(models.Model):
     fp = models.IntegerField('fp')
     threshold = models.FloatField('value', help_text="Property Value", default=0.0)
     rawscore = models.FloatField('rawscore',default=0.0)
-    datasource = models.ForeignKey(DataSources)
+    datasource = models.ForeignKey(DataSources, models.CASCADE)
 
     def __unicode__(self):
         return "id:%d, size:%d, fp:%d, threshold:%f, rawscore:%f" % (self.id,self.setsize,self.fp,self.threshold,self.rawscore)
@@ -380,7 +385,7 @@ class Protein_Classifications:
 class FP_Parameter(models.Model):
     id = models.AutoField('id',primary_key=True,help_text="<< Primary Key >>")
     fp_id = models.IntegerField('fp_id')
-    datasource = models.ForeignKey(DataSources)
+    datasource = models.ForeignKey(DataSources, models.CASCADE)
     threshold = models.FloatField('value', default=0.0)
     formula_raw_mean = models.CharField('formula_raw_mean',max_length=100)
     formula_raw_stddev = models.CharField('formula_raw_stddev',max_length=100)
@@ -448,7 +453,7 @@ class FP_Parameter(models.Model):
 
 class All_FPS(models.Model):
     id = models.AutoField('id',primary_key=True,help_text="<< Primary Key >>")
-    datasource = models.ForeignKey(DataSources)
+    datasource = models.ForeignKey(DataSources, models.CASCADE)
     fp_id = models.IntegerField('fp_id')
     fp_dict = models.BinaryField('fp_dict')
 
@@ -475,4 +480,4 @@ if os.path.exists('ocean/custom_models.py'):
     for entry,value in mcm.items():
         if not entry in current_locals.keys():
             current_locals.update({entry:value})
-            print >> sys.stderr, "monkey patch custom model",entry,value
+            print("monkey patch custom model", entry, value, file=sys.stderr)
