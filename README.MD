@@ -1,3 +1,7 @@
+THIS IS CURRENTLY DEPRECATED DUE TO RECENT CHANGES TOWARDS PYTHON3.7 compatibility
+- admin interface is currently broken
+
+
 OCEAN - Optimized Cross rEActivity estimatioN
 --------
 
